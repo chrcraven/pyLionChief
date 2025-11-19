@@ -67,13 +67,31 @@ MOTOR COMMANDS
 ═══════════════════════════════════════════════════════════════════════════════
 
   motor,set_speed,<speed>
-    Set the train's speed
+    Set the train's speed directly
     Arguments:
       speed (int): Speed value (0-100, where 0 is stopped, 100 is max speed)
     Examples:
       motor,set_speed,0         # Stop the train
       motor,set_speed,50        # Set to half speed
       motor,set_speed,100       # Set to maximum speed
+
+  motor,gradual_speed_change,<target_speed>,<step>,<delay>
+    Gradually change speed to avoid sudden jumps
+    Arguments:
+      target_speed (int): Target speed (0-100)
+      step (int): Speed change per step (default: 5, optional)
+      delay (float): Seconds between steps (default: 0.2, optional)
+    Examples:
+      motor,gradual_speed_change,50         # Smoothly ramp to speed 50
+      motor,gradual_speed_change,0,3,0.1    # Slow down with step=3, delay=0.1s
+      motor,gradual_speed_change,80,10,0.3  # Speed up with step=10, delay=0.3s
+
+  motor,stop
+    Stop the train (set speed to 0)
+    Arguments:
+      None
+    Examples:
+      motor,stop    # Stop the train
 
   motor,set_movement_direction,<forward>
     Set the train's movement direction
