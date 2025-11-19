@@ -12,9 +12,48 @@ from bleak import BleakError
 import asyncio
 import inspect
 import ast
+import platform
+
+# Platform-aware Unicode support
+# Windows cmd.exe may not support Unicode properly
+def _supports_unicode() -> bool:
+    """Check if the terminal supports Unicode characters"""
+    if platform.system() == 'Windows':
+        # Windows Terminal and PowerShell support Unicode, cmd.exe may not
+        # Check if we're in a modern terminal
+        try:
+            import codecs
+            return sys.stdout.encoding.lower().startswith('utf')
+        except:
+            return False
+    return True
+
+_UNICODE_SUPPORT = _supports_unicode()
+
+# Cross-platform symbols
+if _UNICODE_SUPPORT:
+    CHECK_MARK = '✓'
+    CROSS_MARK = '❌'
+    H_LINE = '═'
+    TOP_LEFT = '┌'
+    TOP_RIGHT = '┐'
+    BOTTOM_LEFT = '└'
+    BOTTOM_RIGHT = '┘'
+    V_LINE = '│'
+else:
+    # ASCII fallbacks for Windows cmd.exe
+    CHECK_MARK = '[OK]'
+    CROSS_MARK = '[X]'
+    H_LINE = '='
+    TOP_LEFT = '+'
+    TOP_RIGHT = '+'
+    BOTTOM_LEFT = '+'
+    BOTTOM_RIGHT = '+'
+    V_LINE = '|'
 
 # Help documentation for all available commands
-HELP_TEXT = """
+# Box drawing characters will be replaced at runtime for Windows compatibility
+HELP_TEXT_TEMPLATE = """
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                     LionChief Train Control CLI                             │
 │                                                                             │
@@ -169,6 +208,20 @@ QUICK START EXAMPLES
 
 """
 
+def _get_help_text() -> str:
+    """Get help text with platform-appropriate box drawing characters"""
+    if _UNICODE_SUPPORT:
+        return HELP_TEXT_TEMPLATE
+    else:
+        # Replace Unicode box drawing characters with ASCII equivalents for Windows cmd.exe
+        text = HELP_TEXT_TEMPLATE
+        text = text.replace('┌', '+').replace('┐', '+')
+        text = text.replace('└', '+').replace('┘', '+')
+        text = text.replace('│', '|')
+        text = text.replace('─', '-')
+        text = text.replace('═', '=')
+        return text
+
 def cast_argument(argument, arg_type):
     try:
         return ast.literal_eval(argument)
@@ -231,7 +284,7 @@ async def main() -> None:
 
             # Handle utility commands
             if command.lower() in ['help', '?']:
-                print(HELP_TEXT)
+                print(_get_help_text())
                 continue
 
             if command.lower() in ['exit', 'quit', 'q']:
@@ -241,7 +294,7 @@ async def main() -> None:
             # Parse command
             command_parts = command.split(',')
             if len(command_parts) < 2:
-                print('❌ Invalid command format.')
+                print(f'{CROSS_MARK} Invalid command format.')
                 print('   Format: <component>,<method>,<arg1>,<arg2>,...')
                 print('   Type "help" for more information.')
                 continue
@@ -253,33 +306,33 @@ async def main() -> None:
             try:
                 if service_component_name == "connection":
                     await execute_service_command(d, service_component_method, service_command_parts)
-                    print("✓ Command executed successfully")
+                    print(f"{CHECK_MARK} Command executed successfully")
                 elif service_component_name == "motor":
                     await execute_service_command(d.motor, service_component_method, service_command_parts)
-                    print("✓ Command executed successfully")
+                    print(f"{CHECK_MARK} Command executed successfully")
                 elif service_component_name == "sound":
                     await execute_service_command(d.sound, service_component_method, service_command_parts)
-                    print("✓ Command executed successfully")
+                    print(f"{CHECK_MARK} Command executed successfully")
                 elif service_component_name == "lighting":
                     await execute_service_command(d.lighting, service_component_method, service_command_parts)
-                    print("✓ Command executed successfully")
+                    print(f"{CHECK_MARK} Command executed successfully")
                 else:
-                    print(f'❌ Unknown component: {service_component_name}')
+                    print(f'{CROSS_MARK} Unknown component: {service_component_name}')
                     print('   Valid components: connection, motor, sound, lighting')
             except ValueError as err:
-                print(f"❌ Error: {err}")
+                print(f"{CROSS_MARK} Error: {err}")
             except SyntaxError as err:
-                print('❌ Invalid arguments. Check your inputs')
+                print(f'{CROSS_MARK} Invalid arguments. Check your inputs')
             except AttributeError as err:
-                print(f'❌ Unknown method: {service_component_method}')
+                print(f'{CROSS_MARK} Unknown method: {service_component_method}')
                 print(f'   Type "help" to see available commands for {service_component_name}')
             except Exception as err:
-                print(f'❌ Unexpected error: {err}')
+                print(f'{CROSS_MARK} Unexpected error: {err}')
 
     except OSError as err:
-        print(f"\n❌ Discovery failed due to operating system: {err}")
+        print(f"\n{CROSS_MARK} Discovery failed due to operating system: {err}")
     except BleakError as err:
-        print(f"\n❌ Discovery failed due to Bleak: {err}")
+        print(f"\n{CROSS_MARK} Discovery failed due to Bleak: {err}")
     except KeyboardInterrupt as err:
         print("\n\nInterrupted by user.")
     finally:

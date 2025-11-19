@@ -6,7 +6,6 @@ See LICENSE file in the project root for full license information.
 import asyncio
 import logging
 import os
-import platform
 from bleak import BleakScanner, BleakClient
 from bleak.exc import BleakError
 
