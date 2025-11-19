@@ -13,6 +13,10 @@ from lionchief.motor import LionChiefMotorController
 from lionchief.sound import LionChiefSoundController
 from lionchief.lighting import LionChiefLightingController
 
+# Global lock to prevent concurrent BLE scanning operations
+# This prevents "Operation already in progress" errors at the BlueZ level
+_scan_lock = asyncio.Lock()
+
 class LionChiefConnection(object):
     """
     Represents a connection to a LionChief train.
@@ -94,6 +98,10 @@ async def discover_trains(retry: bool = False, max_retries: int = 10) -> list:
 
     Returns:
         a list of LionChiefConnection objects representing the discovered train Bluetooth devices if any. Otherwise an empty list
+
+    Note:
+        Uses a global lock to prevent concurrent BLE scans, which can cause "Operation already in progress"
+        errors at the BlueZ level on Linux systems (especially Raspberry Pi).
     """
 
     train_connections = []
@@ -101,71 +109,78 @@ async def discover_trains(retry: bool = False, max_retries: int = 10) -> list:
     backoff_delay = 1.0  # Start with 1 second delay
 
     while True:
-        try:
-            # Scan for devices with the LionChief service UUID
-            logging.debug("Starting BLE scan for LionChief trains...")
-            devices = await BleakScanner.discover(
-                return_adv=True,
-                service_uuids=[LionChiefConnection.LionChiefServiceId],
-                timeout=5.0
-            )
+        # Acquire lock to prevent concurrent BLE scanning operations
+        # This is critical for preventing BlueZ "Operation already in progress" errors
+        async with _scan_lock:
+            try:
+                # Scan for devices with the LionChief service UUID
+                logging.debug("Starting BLE scan for LionChief trains...")
+                devices = await BleakScanner.discover(
+                    return_adv=True,
+                    service_uuids=[LionChiefConnection.LionChiefServiceId],
+                    timeout=5.0
+                )
 
-            if len(devices) == 0:
+                if len(devices) == 0:
+                    if retry and retry_count < max_retries:
+                        retry_count += 1
+                        logging.warning(f"No trains discovered. Retrying ({retry_count}/{max_retries})...")
+                        await asyncio.sleep(backoff_delay)
+                        # Exponential backoff, capped at 8 seconds
+                        backoff_delay = min(backoff_delay * 1.5, 8.0)
+                        continue
+                    else:
+                        logging.error("Train discovery failed - no devices found.")
+                        break
+                else:
+                    # Process discovered trains
+                    for ble_device, advertising_data in devices.values():
+                        logging.info(f"Train successfully discovered: [ {ble_device} ]")
+                        train_connections.append(LionChiefConnection(ble_device, advertising_data.manufacturer_data))
+                    break
+
+            except BleakError as e:
+                error_msg = str(e).lower()
+
+                # Handle "Operation already in progress" error specifically
+                if "operation already in progress" in error_msg or "busy" in error_msg:
+                    if retry and retry_count < max_retries:
+                        retry_count += 1
+                        logging.warning(f"Bluetooth adapter busy (operation already in progress). Waiting {backoff_delay:.1f}s before retry ({retry_count}/{max_retries})...")
+                        await asyncio.sleep(backoff_delay)
+                        # Exponential backoff, capped at 10 seconds for adapter busy errors
+                        backoff_delay = min(backoff_delay * 2.0, 10.0)
+                        continue
+                    else:
+                        logging.error(f"BLE scan failed: {e}")
+                        break
+                else:
+                    # Handle other BleakErrors
+                    if retry and retry_count < max_retries:
+                        retry_count += 1
+                        logging.warning(f"BLE error occurred: {e}. Retrying ({retry_count}/{max_retries})...")
+                        await asyncio.sleep(backoff_delay)
+                        backoff_delay = min(backoff_delay * 1.5, 8.0)
+                        continue
+                    else:
+                        logging.error(f"BLE scan failed: {e}")
+                        break
+
+            except Exception as e:
+                # Catch any other unexpected errors
+                logging.error(f"Unexpected error during train discovery: {e}")
                 if retry and retry_count < max_retries:
                     retry_count += 1
-                    logging.warning(f"No trains discovered. Retrying ({retry_count}/{max_retries})...")
+                    logging.warning(f"Retrying after unexpected error ({retry_count}/{max_retries})...")
                     await asyncio.sleep(backoff_delay)
-                    # Exponential backoff, capped at 8 seconds
                     backoff_delay = min(backoff_delay * 1.5, 8.0)
                     continue
                 else:
-                    logging.error("Train discovery failed - no devices found.")
-                    break
-            else:
-                # Process discovered trains
-                for ble_device, advertising_data in devices.values():
-                    logging.info(f"Train successfully discovered: [ {ble_device} ]")
-                    train_connections.append(LionChiefConnection(ble_device, advertising_data.manufacturer_data))
-                break
-
-        except BleakError as e:
-            error_msg = str(e).lower()
-
-            # Handle "Operation already in progress" error specifically
-            if "operation already in progress" in error_msg or "busy" in error_msg:
-                if retry and retry_count < max_retries:
-                    retry_count += 1
-                    logging.warning(f"Bluetooth adapter busy (operation already in progress). Waiting {backoff_delay:.1f}s before retry ({retry_count}/{max_retries})...")
-                    await asyncio.sleep(backoff_delay)
-                    # Exponential backoff, capped at 10 seconds for adapter busy errors
-                    backoff_delay = min(backoff_delay * 2.0, 10.0)
-                    continue
-                else:
-                    logging.error(f"BLE scan failed: {e}")
-                    break
-            else:
-                # Handle other BleakErrors
-                if retry and retry_count < max_retries:
-                    retry_count += 1
-                    logging.warning(f"BLE error occurred: {e}. Retrying ({retry_count}/{max_retries})...")
-                    await asyncio.sleep(backoff_delay)
-                    backoff_delay = min(backoff_delay * 1.5, 8.0)
-                    continue
-                else:
-                    logging.error(f"BLE scan failed: {e}")
                     break
 
-        except Exception as e:
-            # Catch any other unexpected errors
-            logging.error(f"Unexpected error during train discovery: {e}")
-            if retry and retry_count < max_retries:
-                retry_count += 1
-                logging.warning(f"Retrying after unexpected error ({retry_count}/{max_retries})...")
-                await asyncio.sleep(backoff_delay)
-                backoff_delay = min(backoff_delay * 1.5, 8.0)
-                continue
-            else:
-                break
+        # Small delay after releasing lock to allow BlueZ to fully clean up
+        # This helps prevent residual state issues on Raspberry Pi
+        await asyncio.sleep(0.1)
 
     return train_connections
 
