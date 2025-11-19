@@ -5,6 +5,8 @@ See LICENSE file in the project root for full license information.
 
 import asyncio
 import logging
+import os
+import platform
 from bleak import BleakScanner, BleakClient
 from bleak.exc import BleakError
 
@@ -16,6 +18,86 @@ from lionchief.lighting import LionChiefLightingController
 # Global lock to prevent concurrent BLE scanning operations
 # This prevents "Operation already in progress" errors at the BlueZ level
 _scan_lock = asyncio.Lock()
+
+# Try to import pydbus for Raspberry Pi D-Bus cleanup
+# This is optional and only used on Raspberry Pi
+try:
+    from pydbus import SystemBus
+    _PYDBUS_AVAILABLE = True
+except ImportError:
+    _PYDBUS_AVAILABLE = False
+
+def _is_raspberry_pi() -> bool:
+    """
+    Detect if running on a Raspberry Pi.
+
+    Returns:
+        True if running on Raspberry Pi, False otherwise
+    """
+    try:
+        # Check for Raspberry Pi specific files
+        if os.path.exists('/sys/firmware/devicetree/base/model'):
+            with open('/sys/firmware/devicetree/base/model', 'r') as f:
+                model = f.read().lower()
+                if 'raspberry pi' in model:
+                    return True
+
+        # Fallback: check for BCM chip in /proc/cpuinfo
+        if os.path.exists('/proc/cpuinfo'):
+            with open('/proc/cpuinfo', 'r') as f:
+                cpuinfo = f.read().lower()
+                if 'bcm' in cpuinfo and 'raspberry' in cpuinfo:
+                    return True
+    except Exception:
+        pass
+
+    return False
+
+# Cache the platform detection result
+_IS_RASPBERRY_PI = _is_raspberry_pi()
+
+# Log platform detection info at module load
+if _IS_RASPBERRY_PI:
+    logging.debug("Raspberry Pi detected - BlueZ adapter cleanup enabled")
+    if not _PYDBUS_AVAILABLE:
+        logging.info("pydbus not available - install with 'pip install pydbus' for enhanced Raspberry Pi BLE reliability")
+else:
+    logging.debug("Not running on Raspberry Pi - BlueZ adapter cleanup disabled")
+
+async def _ensure_clean_adapter_state(adapter_name: str = 'hci0') -> None:
+    """
+    Ensure Bluetooth adapter is not in discovery mode before scanning.
+
+    This function is specifically designed for Raspberry Pi systems where
+    BlueZ can get stuck in discovery mode, causing "Operation already in progress" errors.
+
+    On non-Raspberry Pi systems, this function does nothing.
+
+    Args:
+        adapter_name (str): The Bluetooth adapter name (default: 'hci0')
+    """
+    # Only attempt cleanup on Raspberry Pi with pydbus available
+    if not _IS_RASPBERRY_PI or not _PYDBUS_AVAILABLE:
+        return
+
+    try:
+        bus = SystemBus()
+        adapter_path = f'/org/bluez/{adapter_name}'
+        adapter = bus.get('org.bluez', adapter_path)
+
+        # Check if discovery is active
+        if adapter.Discovering:
+            logging.info(f"Stopping active discovery on {adapter_name}...")
+            try:
+                adapter.StopDiscovery()
+                await asyncio.sleep(0.5)  # Give BlueZ time to clean up
+                logging.debug(f"Successfully stopped discovery on {adapter_name}")
+            except Exception as e:
+                logging.debug(f"Could not stop discovery: {e}")
+                # Continue anyway - not critical
+    except Exception as e:
+        # D-Bus errors are not critical - the retry logic will handle it
+        logging.debug(f"Could not check adapter state via D-Bus: {e}")
 
 class LionChiefConnection(object):
     """
@@ -102,11 +184,18 @@ async def discover_trains(retry: bool = False, max_retries: int = 10) -> list:
     Note:
         Uses a global lock to prevent concurrent BLE scans, which can cause "Operation already in progress"
         errors at the BlueZ level on Linux systems (especially Raspberry Pi).
+
+        On Raspberry Pi systems with pydbus installed, this function will also attempt to clean up
+        any stuck discovery state via D-Bus before scanning.
     """
 
     train_connections = []
     retry_count = 0
     backoff_delay = 1.0  # Start with 1 second delay
+
+    # On Raspberry Pi, ensure adapter is not stuck in discovery mode
+    # This is a no-op on other platforms
+    await _ensure_clean_adapter_state()
 
     while True:
         # Acquire lock to prevent concurrent BLE scanning operations
