@@ -69,11 +69,11 @@ MOTOR COMMANDS
   motor,set_speed,<speed>
     Set the train's speed
     Arguments:
-      speed (int): Speed value (0-255, where 0 is stopped, 255 is max speed)
+      speed (int): Speed value (0-100, where 0 is stopped, 100 is max speed)
     Examples:
       motor,set_speed,0         # Stop the train
-      motor,set_speed,100       # Set to medium speed
-      motor,set_speed,255       # Set to maximum speed
+      motor,set_speed,50        # Set to half speed
+      motor,set_speed,100       # Set to maximum speed
 
   motor,set_movement_direction,<forward>
     Set the train's movement direction
@@ -192,7 +192,7 @@ QUICK START EXAMPLES
 
   1. Start the train moving forward at medium speed:
      motor,set_movement_direction,True
-     motor,set_speed,128
+     motor,set_speed,50
 
   2. Ring the bell and turn on lights:
      sound,set_bell,True

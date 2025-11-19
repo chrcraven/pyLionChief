@@ -25,7 +25,7 @@ class LionChiefMotorController(object):
         Set the speed of the train.
 
         Args:
-            speed (int): The speed of the train.
+            speed (int): The speed of the train (0-100, where 0 is stopped and 100 is maximum speed).
         """
         await self.train.send_train_command(LionChiefBluetoothCommands.SetSpeed, [speed])
 
