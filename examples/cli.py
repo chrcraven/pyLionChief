@@ -13,6 +13,8 @@ import asyncio
 import inspect
 import ast
 import platform
+import readline  # For command history support
+import logging  # For debug mode
 
 # Platform-aware Unicode support
 # Windows cmd.exe may not support Unicode properly
@@ -178,6 +180,9 @@ UTILITY COMMANDS
   help
     Display this help message
 
+  debug
+    Toggle debug mode (shows raw BLE commands being sent)
+
   exit or quit
     Exit the CLI application
 
@@ -267,13 +272,24 @@ async def main() -> None:
     print("="*80)
     print("\nScanning for trains... (Press Ctrl+C to cancel)\n")
 
+    # Enable command history with readline
+    # This allows up/down arrows to recall previous commands
+    try:
+        readline.parse_and_bind("tab: complete")
+        readline.parse_and_bind("set editing-mode emacs")
+    except:
+        pass  # readline might not be available on all platforms
+
+    # Debug mode flag
+    debug_mode = False
+
     d = await discover_train(retry=True)
     try:
         await d.connect()
         print("\n" + "="*80)
         print("Connected to train!".center(80))
         print("="*80)
-        print("\nType 'help' for available commands, 'exit' or 'quit' to exit\n")
+        print("\nType 'help' for available commands, 'debug' to toggle debug mode, 'exit' or 'quit' to exit\n")
 
         while d.train.is_connected:
             command = input("LionChief> ").strip()
@@ -285,6 +301,16 @@ async def main() -> None:
             # Handle utility commands
             if command.lower() in ['help', '?']:
                 print(_get_help_text())
+                continue
+
+            if command.lower() == 'debug':
+                debug_mode = not debug_mode
+                if debug_mode:
+                    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+                    print(f"{CHECK_MARK} Debug mode ENABLED - will show raw BLE commands")
+                else:
+                    logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
+                    print(f"{CHECK_MARK} Debug mode DISABLED")
                 continue
 
             if command.lower() in ['exit', 'quit', 'q']:
