@@ -283,6 +283,13 @@ async def main() -> None:
     # Debug mode flag
     debug_mode = False
 
+    # Set up logging with ability to change level dynamically
+    logger = logging.getLogger()
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)  # Start with WARNING level
+
     d = await discover_train(retry=True)
     try:
         await d.connect()
@@ -306,10 +313,10 @@ async def main() -> None:
             if command.lower() == 'debug':
                 debug_mode = not debug_mode
                 if debug_mode:
-                    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+                    logger.setLevel(logging.DEBUG)
                     print(f"{CHECK_MARK} Debug mode ENABLED - will show raw BLE commands")
                 else:
-                    logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
+                    logger.setLevel(logging.WARNING)
                     print(f"{CHECK_MARK} Debug mode DISABLED")
                 continue
 

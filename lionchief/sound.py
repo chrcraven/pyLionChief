@@ -40,7 +40,7 @@ class LionChiefSoundController(object):
 
         volumes = [0xfe, 0xff, 0, 1, 2]
         if volume < 0 or volume >= len(volumes):
-            raise ValueError("Steam volume must be between 0 and %s" % volume)
+            raise ValueError(f"Steam volume must be between 0 and {len(volumes) - 1} (got {volume})")
 
         await self.train.send_train_command(LionChiefBluetoothCommands.SetSteamVolume, [volumes[volume]])
 
@@ -74,7 +74,7 @@ class LionChiefSoundController(object):
 
         pitches = [0xfe, 0xff, 0, 1, 2]
         if pitch < 0 or pitch >= len(pitches):
-            raise ValueError("Horn pitch must be between 0 and %s" % pitch)
+            raise ValueError(f"Horn pitch must be between 0 and {len(pitches) - 1} (got {pitch})")
 
         await self.train.send_train_command(LionChiefBluetoothCommands.SetEffectVolume, [LionChiefAudioDevices.Horn, 0x0e, pitches[pitch]])
 
@@ -88,7 +88,7 @@ class LionChiefSoundController(object):
 
         pitches = [0xfe, 0xff, 0, 1, 2]
         if pitch < 0 or pitch >= len(pitches):
-            raise ValueError("Bell pitch must be between 0 and %s" % pitch)
+            raise ValueError(f"Bell pitch must be between 0 and {len(pitches) - 1} (got {pitch})")
 
         await self.train.send_train_command(LionChiefBluetoothCommands.SetEffectVolume, [LionChiefAudioDevices.Bell, 0x0e, pitches[pitch]])
 
@@ -102,7 +102,7 @@ class LionChiefSoundController(object):
 
         volumes = [0xfe, 0xff, 0, 1, 2]
         if volume < 0 or volume >= len(volumes):
-            raise ValueError("Voice volume must be between 0 and %s" % volume)
+            raise ValueError(f"Voice line volume must be between 0 and {len(volumes) - 1} (got {volume})")
 
         await self.train.send_train_command(LionChiefBluetoothCommands.SetEffectVolume, [LionChiefAudioDevices.Speech, 0x0e, volumes[volume]])
 
@@ -116,7 +116,7 @@ class LionChiefSoundController(object):
 
         volumes = [0xfe, 0xff, 0, 1, 2]
         if volume < 0 or volume >= len(volumes):
-            raise ValueError("Voice volume must be between 0 and %s" % volume)
+            raise ValueError(f"Engine volume must be between 0 and {len(volumes) - 1} (got {volume})")
 
         await self.train.send_train_command(LionChiefBluetoothCommands.SetEffectVolume, [LionChiefAudioDevices.Engine, 0x0e, volumes[volume]])
 
