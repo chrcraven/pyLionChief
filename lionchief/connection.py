@@ -94,38 +94,31 @@ async def discover_trains(retry: bool = False) -> list:
         a list of LionChiefConnection objects representing the discovered train Bluetooth devices if any. Otherwise an empty list
     """
 
-    async with BleakScanner() as scanner:      
-        await scanner.start()
+    train_connections = []
 
-        train_connections = []
-        trains = []
+    while True:
+        # Scan for devices with the LionChief service UUID
+        devices = await BleakScanner.discover(
+            return_adv=True,
+            service_uuids=[LionChiefConnection.LionChiefServiceId],
+            timeout=5.0
+        )
 
-        while True:
-            possible_trains = scanner.discovered_devices_and_advertisement_data
-            if len(possible_trains) == 0:
-                await asyncio.sleep(5)
+        if len(devices) == 0:
+            if retry:
+                logging.warning("Train discovery failed. Retrying...")
+                await asyncio.sleep(1)
                 continue
-
-            for possible_train_address in possible_trains:
-                ble_device, advertising_data = possible_trains[possible_train_address]
-                if LionChiefConnection.LionChiefServiceId in advertising_data.service_uuids:
-                    trains.append((ble_device, advertising_data.manufacturer_data))
-                    
-            if len(trains) == 0:
-                if not retry:
-                    logging.error("Train discovery failed. Retrying...")
-                    await asyncio.sleep(5)
-                    continue
-                else:
-                    logging.warning("Train discovery failed. Retrying...")
-                    await asyncio.sleep(5)
-                    continue
             else:
-                for discovered_train in trains:
-                    logging.info(f"Train successfully discovered: [ {discovered_train[0]} ]")
-                    train_connections.append(LionChiefConnection(*discovered_train))
+                logging.error("Train discovery failed.")
                 break
-    
+        else:
+            # Process discovered trains
+            for ble_device, advertising_data in devices.values():
+                logging.info(f"Train successfully discovered: [ {ble_device} ]")
+                train_connections.append(LionChiefConnection(ble_device, advertising_data.manufacturer_data))
+            break
+
     return train_connections
 
 async def discover_train(retry: bool = False) -> LionChiefConnection:
