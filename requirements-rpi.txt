@@ -1,0 +1,7 @@
+# Optional dependencies for enhanced Raspberry Pi support
+# Install with: pip install -r requirements-rpi.txt
+#
+# These dependencies enable D-Bus adapter cleanup to prevent
+# "Operation already in progress" errors on Raspberry Pi systems
+
+pydbus>=0.6.0
